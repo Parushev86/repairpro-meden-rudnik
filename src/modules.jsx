@@ -735,35 +735,163 @@ function PartsSaleModal({ sale, inventory, onSave, onClose, isAdmin = false }) {
 }
 
 // ══ PHONE SALES ════════════════════════════════════════════════════════════════
-export function PhoneSalesTab({ sales, inventory = [], onSave, onDelete, onWarranty, isAdmin = false }) {
+export function PhoneSalesTab({ sales, inventory = [], onSave, onDelete, onWarranty, isAdmin = false, technicians = [] }) {
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
+  const [periodMode, setPeriodMode] = useState("Ден"); // "Ден" | "Месец" | "Период"
   const [date, setDate] = useState("");
+  const [month, setMonth] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [selected, setSelected] = useState(new Set());
+
   const filtered = sales.filter(s => {
-  const q = search.toLowerCase();
-  // Ако е техник и има търсене — показвай всички резултати
-  // Ако е техник и няма търсене — скрий платените
-  if (!isAdmin && !q && s.payment_method !== "Не е платена") return false;
-  return (!q || [s.brand, s.model, s.imei, s.buyer_name].some(f => (f || "").toLowerCase().includes(q)))
-    && (!date || (s.date || "").slice(0, 10) === date);
-});
+    const q = search.toLowerCase();
+    if (!isAdmin && !q && s.payment_method !== "Не е платена") return false;
+    const matchSearch = !q || [s.brand, s.model, s.imei, s.buyer_name].some(f => (f || "").toLowerCase().includes(q));
+    let matchDate = true;
+    if (periodMode === "Ден" && date) matchDate = (s.date || "").slice(0, 10) === date;
+    else if (periodMode === "Месец" && month) matchDate = (s.date || "").startsWith(month);
+    else if (periodMode === "Период") {
+      if (dateFrom) matchDate = matchDate && (s.date || "").slice(0, 10) >= dateFrom;
+      if (dateTo) matchDate = matchDate && (s.date || "").slice(0, 10) <= dateTo;
+    }
+    return matchSearch && matchDate;
+  });
+
   const phoneStock = inventory.filter(i => i.category === "Телефони" && Number(i.quantity) > 0);
   const totalRev = filtered.reduce((s, r) => s + Number(r.sale_price || 0), 0);
   const totalCost = filtered.reduce((s, r) => s + Number(r.cost_price || 0), 0);
-  const exportAll = () => { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filtered.map(r => ({ Дата: r.date, Марка: r.brand, Модел: r.model, Цвят: r.color || "", IMEI: r.imei || "", "Сериен №": r.serial_number || "", Купувач: r.buyer_name || "", "Доставна €": r.cost_price, "Продажна €": r.sale_price, "Печалба €": Number(r.sale_price || 0) - Number(r.cost_price || 0), Плащане: r.payment_method }))), "Продажби телефони"); XLSX.writeFile(wb, `Продажби_телефони_${today()}.xlsx`); };
+
+  const toggleSel = id => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const toggleAll = () => {
+    if (filtered.every(r => selected.has(r.id))) {
+      setSelected(prev => {
+        const next = new Set(prev);
+        filtered.forEach(r => next.delete(r.id));
+        return next;
+      });
+    } else {
+      setSelected(prev => {
+        const next = new Set(prev);
+        filtered.forEach(r => next.add(r.id));
+        return next;
+      });
+    }
+  };
+
+  const allFilteredSelected = filtered.length > 0 && filtered.every(r => selected.has(r.id));
+
+  const getPeriodLabel = () => {
+    if (periodMode === "Ден" && date) return date;
+    if (periodMode === "Месец" && month) return month;
+    if (periodMode === "Период") {
+      if (dateFrom && dateTo) return `${dateFrom}_${dateTo}`;
+      if (dateFrom) return `от_${dateFrom}`;
+      if (dateTo) return `до_${dateTo}`;
+    }
+    return "всички";
+  };
+
+  const toExportRow = r => ({
+    "Дата": r.date,
+    "Марка": r.brand,
+    "Модел": r.model,
+    "Цвят": r.color || "",
+    "IMEI": r.imei || "",
+    "Сериен №": r.serial_number || "",
+    "Купувач": r.buyer_name || "",
+    "Телефон купувач": r.buyer_phone || "",
+    "Продал": r.technician || "",
+    "Доставна €": r.cost_price,
+    "Продажна €": r.sale_price,
+    "Печалба €": Number(r.sale_price || 0) - Number(r.cost_price || 0),
+    "Плащане": r.payment_method,
+  });
+
+  const exportAll = () => {
+    const rows = selected.size > 0 ? filtered.filter(r => selected.has(r.id)) : filtered;
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows.map(toExportRow)), "Продажби телефони");
+    XLSX.writeFile(wb, `Продажби_телефони_${getPeriodLabel()}_${today()}.xlsx`);
+  };
+
+  const periodBtnStyle = active => ({
+    background: active ? "#0e3a4a" : "#1e293b",
+    color: active ? "#38bdf8" : "#94a3b8",
+    border: active ? "1px solid #38bdf8" : "1px solid #334155",
+    borderRadius: 7,
+    padding: "7px 13px",
+    cursor: "pointer",
+    fontSize: 12,
+    fontWeight: active ? 700 : 400,
+  });
+
   return (
     <div className="animate-fade">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>📲 Продажба на телефони</h1>
-        <div style={{ display: "flex", gap: 8 }}>{isAdmin && <MBtn color="#10b981" bg="#064e3b" onClick={exportAll}>📊 Excel</MBtn>}<MPrimaryBtn onClick={() => setModal({})}>+ Нова продажба</MPrimaryBtn></div>
+        <div style={{ display: "flex", gap: 8 }}>
+          {isAdmin && (
+            <MBtn color="#10b981" bg="#064e3b" onClick={exportAll}>
+              📊 {selected.size > 0 ? `Excel (${selected.size} избрани)` : "Excel"}
+            </MBtn>
+          )}
+          <MPrimaryBtn onClick={() => setModal({})}>+ Нова продажба</MPrimaryBtn>
+        </div>
       </div>
-      <div style={{ display: "flex", gap: 10, marginBottom: 14, alignItems: "flex-end" }}>
-        <MField label="Дата"><input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ width: 170 }} /></MField>
-        <button onClick={() => setDate("")} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "7px 12px", cursor: "pointer", fontSize: 12, marginBottom: 1 }}>Всички</button>
-        <input placeholder="🔍  Търси..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
-        <MCard style={{ padding: "10px 14px", borderLeft: "4px solid #10b981" }}><div style={{ fontSize: 11, color: "#64748b" }}>Приход</div><div style={{ fontSize: 16, fontWeight: 800, color: "#10b981" }}>{fmtM(totalRev)}</div></MCard>
-        <MCard style={{ padding: "10px 14px", borderLeft: "4px solid #8b5cf6" }}><div style={{ fontSize: 11, color: "#64748b" }}>Печалба</div><div style={{ fontSize: 16, fontWeight: 800, color: "#8b5cf6" }}>{fmtM(totalRev - totalCost)}</div></MCard>
+
+      <div style={{ display: "flex", gap: 8, marginBottom: 14, alignItems: "flex-end", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 4 }}>
+          {["Ден", "Месец", "Период"].map(mode => (
+            <button key={mode} style={periodBtnStyle(periodMode === mode)} onClick={() => setPeriodMode(mode)}>{mode}</button>
+          ))}
+        </div>
+
+        {periodMode === "Ден" && (
+          <>
+            <MField label="Дата">
+              <input type="date" value={date} onChange={e => setDate(e.target.value)} style={{ width: 170 }} />
+            </MField>
+            <button onClick={() => setDate("")} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "7px 12px", cursor: "pointer", fontSize: 12, marginBottom: 1 }}>Всички</button>
+          </>
+        )}
+        {periodMode === "Месец" && (
+          <>
+            <MField label="Месец">
+              <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ width: 160 }} />
+            </MField>
+            <button onClick={() => setMonth("")} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "7px 12px", cursor: "pointer", fontSize: 12, marginBottom: 1 }}>Всички</button>
+          </>
+        )}
+        {periodMode === "Период" && (
+          <>
+            <MField label="От">
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ width: 155 }} />
+            </MField>
+            <MField label="До">
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ width: 155 }} />
+            </MField>
+            <button onClick={() => { setDateFrom(""); setDateTo(""); }} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "7px 12px", cursor: "pointer", fontSize: 12, marginBottom: 1 }}>Всички</button>
+          </>
+        )}
+
+        <input placeholder="🔍  Търси..." value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1, minWidth: 140 }} />
+        <MCard style={{ padding: "10px 14px", borderLeft: "4px solid #10b981" }}>
+          <div style={{ fontSize: 11, color: "#64748b" }}>Приход</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#10b981" }}>{fmtM(totalRev)}</div>
+        </MCard>
+        <MCard style={{ padding: "10px 14px", borderLeft: "4px solid #8b5cf6" }}>
+          <div style={{ fontSize: 11, color: "#64748b" }}>Печалба</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: "#8b5cf6" }}>{fmtM(totalRev - totalCost)}</div>
+        </MCard>
       </div>
+
       {phoneStock.length > 0 && (
         <div style={{ background: "#0f172a", border: "1px solid #1d4ed8", borderRadius: 10, padding: 12, marginBottom: 14 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: "#60a5fa", marginBottom: 8 }}>📱 Склад — Телефони ({phoneStock.length} бр.) — кликни за бърза продажба</div>
@@ -779,7 +907,7 @@ export function PhoneSalesTab({ sales, inventory = [], onSave, onDelete, onWarra
               })} style={{ background: "#1e293b", border: "1px solid #334155", borderRadius: 8, padding: "7px 12px", cursor: "pointer", textAlign: "left" }}
                 onMouseEnter={e => e.currentTarget.style.borderColor = "#60a5fa"}
                 onMouseLeave={e => e.currentTarget.style.borderColor = "#334155"}>
-                                <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>{ph.phone_brand ? ph.phone_brand + " " : ""}{ph.phone_model || ph.name}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>{ph.phone_brand ? ph.phone_brand + " " : ""}{ph.phone_model || ph.name}</div>
                 <div style={{ display: "flex", gap: 8, fontSize: 10, marginTop: 2 }}>
                   {ph.phone_color && <span style={{ color: "#64748b" }}>{ph.phone_color}</span>}
                   {ph.sku && <span style={{ color: "#64748b" }}>{ph.sku}</span>}
@@ -792,14 +920,30 @@ export function PhoneSalesTab({ sales, inventory = [], onSave, onDelete, onWarra
           </div>
         </div>
       )}
+
       <MCard style={{ padding: 0, overflow: "hidden" }}>
         <div className="table-wrap">
           <table>
-            <thead style={{ background: "#0a1628" }}><tr>{["Дата", "Устройство", "IMEI", "Купувач", "Доставна", "Продажна", "Плащане", ""].map(h => <th key={h} style={{ padding: "11px 14px", textAlign: "left", fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>)}</tr></thead>
+            <thead style={{ background: "#0a1628" }}>
+              <tr>
+                <th style={{ padding: "11px 12px", textAlign: "center", width: 32 }}>
+                  <input type="checkbox" checked={allFilteredSelected} onChange={toggleAll} style={{ cursor: "pointer", accentColor: "#38bdf8" }} />
+                </th>
+                {["Дата", "Устройство", "IMEI", "Купувач", "Доставна", "Продажна", "Плащане", "Продал", ""].map(h => (
+                  <th key={h} style={{ padding: "11px 14px", textAlign: "left", fontSize: 10, color: "#64748b", fontWeight: 700, textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
             <tbody>
-              {filtered.length === 0 && <tr><td colSpan={8} style={{ textAlign: "center", padding: 32, color: "#475569" }}>Няма продажби</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={9} style={{ textAlign: "center", padding: 32, color: "#475569" }}>Няма продажби</td></tr>}
               {filtered.map(r => (
-                <tr key={r.id} style={{ borderTop: "1px solid #0f172a" }} onMouseEnter={e => e.currentTarget.style.background = "#243044"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                <tr key={r.id}
+                  style={{ borderTop: "1px solid #0f172a", background: selected.has(r.id) ? "#1a2d44" : "transparent" }}
+                  onMouseEnter={e => { if (!selected.has(r.id)) e.currentTarget.style.background = "#243044"; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = selected.has(r.id) ? "#1a2d44" : "transparent"; }}>
+                  <td style={{ padding: "9px 12px", textAlign: "center" }}>
+                    <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} style={{ cursor: "pointer", accentColor: "#38bdf8" }} />
+                  </td>
                   <td style={{ padding: "9px 14px", fontSize: 11, color: "#64748b" }}>{fmtDate(r.date)}</td>
                   <td style={{ padding: "9px 14px", fontSize: 13, fontWeight: 600 }}>{r.brand} {r.model} {r.color ? `(${r.color})` : ""}</td>
                   <td style={{ padding: "9px 14px", fontSize: 11, fontFamily: "monospace", color: "#94a3b8" }}>{r.imei || "—"}</td>
@@ -807,22 +951,25 @@ export function PhoneSalesTab({ sales, inventory = [], onSave, onDelete, onWarra
                   <td style={{ padding: "9px 14px", fontSize: 12, color: "#64748b" }}>{fmtM(r.cost_price)}</td>
                   <td style={{ padding: "9px 14px", fontWeight: 700, color: "#10b981" }}>{fmtM(r.sale_price)}</td>
                   <td style={{ padding: "9px 14px" }}><SBadge text={r.payment_method} /></td>
-                  <td style={{ padding: "9px 14px" }}><div style={{ display: "flex", gap: 4 }}><MBtn color="#3b82f6" onClick={() => setModal(r)}>✏️</MBtn>
+                  <td style={{ padding: "9px 14px", fontSize: 11, color: "#94a3b8" }}>{r.technician || "—"}</td>
+                  <td style={{ padding: "9px 14px" }}><div style={{ display: "flex", gap: 4 }}>
+                    <MBtn color="#3b82f6" onClick={() => setModal(r)}>✏️</MBtn>
                     <MBtn color="#fbbf24" title="Гаранционна карта" onClick={() => onWarranty && onWarranty({ id: r.id, client_name: r.buyer_name, phone: r.buyer_phone, device_type: r.brand, brand: r.brand, model: r.model, serial_number: r.serial_number || r.imei, problem: "Продажба на телефон", technician: "", warranty_days: r.warranty_days || 30, warranty_amount: r.warranty_amount || 1, warranty_unit: r.warranty_unit || "месеца", date_out: r.date })}>🛡️</MBtn>
-                    <MBtn color="#ef4444" onClick={() => { if (confirm("Изтрий?")) onDelete(r.id); }}>🗑️</MBtn></div></td>
+                    <MBtn color="#ef4444" onClick={() => { if (confirm("Изтрий?")) onDelete(r.id); }}>🗑️</MBtn>
+                  </div></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       </MCard>
-      {modal !== null && <PhoneSaleModal sale={modal} isAdmin={isAdmin} onSave={r => { onSave(r); setModal(null); }} onClose={() => setModal(null)} />}
+      {modal !== null && <PhoneSaleModal sale={modal} isAdmin={isAdmin} technicians={technicians} onSave={r => { onSave(r); setModal(null); }} onClose={() => setModal(null)} />}
     </div>
   );
 }
 
-function PhoneSaleModal({ sale, onSave, onClose, isAdmin = false }) {
-  const [f, sf] = useState({ date: today(), brand: "", model: "", color: "", imei: "", serial_number: "", storage: "", warranty_days: 30, warranty_amount: 1, warranty_unit: "месеца", cost_price: "", sale_price: "", payment_method: "В брой", buyer_name: "", buyer_phone: "", notes: "", ...sale });
+function PhoneSaleModal({ sale, onSave, onClose, isAdmin = false, technicians = [] }) {
+  const [f, sf] = useState({ date: today(), brand: "", model: "", color: "", imei: "", serial_number: "", storage: "", warranty_days: 30, warranty_amount: 1, warranty_unit: "месеца", cost_price: "", sale_price: "", payment_method: "В брой", buyer_name: "", buyer_phone: "", technician: "", notes: "", ...sale });
   const s = (k, v) => sf(x => ({ ...x, [k]: v }));
   return (
     <MModal title={sale?.id ? "Редактирай" : "Нова продажба телефон"} onClose={onClose} maxWidth={700} footer={<><CancelBtn onClick={onClose} /><MPrimaryBtn onClick={() => { if (!f.brand || !f.model) { alert("Въведи марка и модел!"); return; } onSave(f); }}>💾 Запази</MPrimaryBtn></>}>
@@ -836,7 +983,13 @@ function PhoneSaleModal({ sale, onSave, onClose, isAdmin = false }) {
     style={!isAdmin ? { background: "#0f172a", color: "#64748b", cursor: "not-allowed" } : {}}
   />
 </MField>
-        <MField label="Плащане"><select value={f.payment_method} onChange={e => s("payment_method", e.target.value)}>{PAYMENT_METHODS.map(p => <option key={p}>{p}</option>)}</select></MField>
+          <MField label="Плащане"><select value={f.payment_method} onChange={e => s("payment_method", e.target.value)}>{PAYMENT_METHODS.map(p => <option key={p}>{p}</option>)}</select></MField>
+        <MField label="Техник">
+          <select value={f.technician || ""} onChange={e => s("technician", e.target.value)}>
+            <option value="">— Не е посочен —</option>
+            {technicians.map(t => <option key={t.name} value={t.name}>{t.name}</option>)}
+          </select>
+        </MField>
         <MField label="Марка *"><input value={f.brand || ""} onChange={e => s("brand", e.target.value)} placeholder="Apple / Samsung..." /></MField>
         <MField label="Модел *"><input value={f.model || ""} onChange={e => s("model", e.target.value)} placeholder="iPhone 14..." /></MField>
         <MField label="Цвят"><input value={f.color || ""} onChange={e => s("color", e.target.value)} placeholder="Черен..." /></MField>
