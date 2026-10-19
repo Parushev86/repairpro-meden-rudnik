@@ -324,12 +324,287 @@ function AccSaleModal({ sale, inventory, technicians = [], onSave, onClose, isAd
     </MModal>
   );
 }
+// ══ DIAGNOSTICS MODULE ════════════════════════════════════════════════════════
+// Добавя се в modules.jsx
+
+// Категории и точки за диагностика
+const DIAGNOSTICS_ITEMS = [
+  {
+    group: "🖥️ Дисплей и визия",
+    items: [
+      { key: "display", label: "Дисплей", desc: "пукнатини, петна, мъртви пиксели" },
+      { key: "back_cover", label: "Заден капак", desc: "пукнатини, драскотини" },
+      { key: "frame", label: "Рамка / Корпус", desc: "деформации, удари" },
+      { key: "buttons", label: "Бутони", desc: "power, volume, home" },
+    ]
+  },
+  {
+    group: "⚙️ Функционалност",
+    items: [
+      { key: "touch", label: "Touch Screen", desc: "реагира ли правилно" },
+      { key: "face_fingerprint", label: "Face ID / Fingerprint", desc: "работи ли" },
+      { key: "charging", label: "Зареждане", desc: "порт + безжично" },
+      { key: "battery", label: "Батерия", desc: "капацитет %" },
+      { key: "speaker", label: "Говорител", desc: "звук" },
+      { key: "microphone", label: "Микрофон", desc: "" },
+      { key: "headphones", label: "Слушалки / Жак", desc: "" },
+    ]
+  },
+  {
+    group: "📷 Камери",
+    items: [
+      { key: "front_camera", label: "Предна камера", desc: "" },
+      { key: "rear_camera_main", label: "Задна камера (основна)", desc: "" },
+      { key: "rear_camera_wide", label: "Задна камера (широкоъгълна)", desc: "" },
+      { key: "flash", label: "Светкавица", desc: "" },
+    ]
+  },
+  {
+    group: "📡 Свързаност",
+    items: [
+      { key: "wifi", label: "Wi-Fi", desc: "" },
+      { key: "bluetooth", label: "Bluetooth", desc: "" },
+      { key: "mobile_data", label: "Мобилни данни / SIM слот", desc: "" },
+      { key: "imei", label: "IMEI номер", desc: "" },
+      { key: "modem", label: "Modem firmware", desc: "при iPhone" },
+    ]
+  },
+  {
+    group: "💻 Софтуер",
+    items: [
+      { key: "account", label: "iCloud / Google акаунт", desc: "излязъл ли е" },
+      { key: "find_my", label: "Find My iPhone", desc: "изключен ли е" },
+      { key: "original_display", label: "Оригинален дисплей", desc: "Apple пише предупреждение" },
+      { key: "original_battery", label: "Оригинална батерия", desc: "Apple пише предупреждение" },
+    ]
+  },
+];
+function printDiagnostics(buyback, diag, notes) {
+  const statusIcon = (val) => val === "ok" ? "✓" : val === "fail" ? "✗" : val === "na" ? "N/A" : "—";
+  const statusColor = (val) => val === "ok" ? "#065f46" : val === "fail" ? "#7f1d1d" : "#374151";
+  const statusBg = (val) => val === "ok" ? "#d1fae5" : val === "fail" ? "#fee2e2" : "#f3f4f6";
+
+  const groupsHtml = DIAGNOSTICS_ITEMS.map(group => `
+    <div class="group">
+      <div class="group-title">${group.group}</div>
+      <table>
+        <tbody>
+          ${group.items.map(item => {
+            const val = diag[item.key];
+            return `<tr>
+              <td class="item-label">${item.label}${item.desc ? ` <span class="desc">(${item.desc})</span>` : ""}</td>
+              <td class="item-status" style="background:${statusBg(val)};color:${statusColor(val)}">${statusIcon(val)}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+  `).join("");
+
+  const okCount = DIAGNOSTICS_ITEMS.flatMap(g => g.items).filter(i => diag[i.key] === "ok").length;
+  const failCount = DIAGNOSTICS_ITEMS.flatMap(g => g.items).filter(i => diag[i.key] === "fail").length;
+  const naCount = DIAGNOSTICS_ITEMS.flatMap(g => g.items).filter(i => diag[i.key] === "na").length;
+
+  const w = window.open("", "_blank");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Диагностика — ${buyback?.brand || ""} ${buyback?.model || ""}</title>
+  <style>
+    @page { size: A4; margin: 16mm 14mm; }
+    body { font-family: Arial, sans-serif; color: #111; font-size: 13px; }
+    h1 { font-size: 18px; color: #1a56db; border-bottom: 3px solid #1a56db; padding-bottom: 8px; margin-bottom: 4px; }
+    .meta { font-size: 12px; color: #555; margin-bottom: 16px; }
+    .summary { display: flex; gap: 16px; margin-bottom: 20px; }
+    .sum-box { padding: 8px 16px; border-radius: 8px; font-weight: 700; font-size: 14px; }
+    .sum-ok  { background: #d1fae5; color: #065f46; }
+    .sum-fail { background: #fee2e2; color: #7f1d1d; }
+    .sum-na  { background: #f3f4f6; color: #374151; }
+    .group { margin-bottom: 16px; break-inside: avoid; }
+    .group-title { font-size: 12px; font-weight: 700; color: #555; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; margin-bottom: 6px; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 6px 10px; border: 1px solid #e5e7eb; font-size: 12px; vertical-align: middle; }
+    .item-label { width: 85%; }
+    .item-status { width: 15%; text-align: center; font-weight: 800; font-size: 14px; }
+    .desc { color: #888; font-size: 11px; font-weight: 400; }
+    .notes-box { margin-top: 16px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; font-size: 12px; break-inside: avoid; }
+    .sig-row { display: flex; justify-content: space-between; margin-top: 40px; gap: 40px; }
+    .sig-box { flex: 1; text-align: center; }
+    .sig-box hr { border: 1px solid #999; margin-bottom: 4px; }
+    .sig-box p { font-size: 11px; color: #555; margin: 2px 0; }
+    .footer { margin-top: 20px; text-align: center; font-size: 10px; color: #aaa; }
+  </style></head><body>
+  <h1>🔍 ДИАГНОСТИЧЕН ПРОТОКОЛ</h1>
+  <div class="meta">
+    <b>Устройство:</b> ${buyback?.brand || "—"} ${buyback?.model || "—"} &nbsp;|&nbsp;
+    <b>IMEI:</b> ${buyback?.imei || "—"} &nbsp;|&nbsp;
+    <b>Дата:</b> ${new Date().toLocaleDateString("bg-BG")} &nbsp;|&nbsp;
+    <b>Продавач:</b> ${buyback?.seller_name || "—"}
+  </div>
+  <div class="summary">
+    <div class="sum-box sum-ok">✓ Работи: ${okCount}</div>
+    <div class="sum-box sum-fail">✗ Дефект: ${failCount}</div>
+    <div class="sum-box sum-na">N/A: ${naCount}</div>
+  </div>
+  ${groupsHtml}
+  ${notes ? `<div class="notes-box"><b>Бележки:</b><br>${notes.replace(/\n/g, "<br>")}</div>` : ""}
+  <div class="sig-row">
+    <div class="sig-box"><hr><p>Технически специалист: ........................</p><p>Подпис: ........................</p></div>
+    <div class="sig-box"><hr><p>Клиент: <b>${buyback?.seller_name || "........................"}</b></p><p>Подпис: ........................</p></div>
+  </div>
+  <div class="footer">RepairPro — ${new Date().toLocaleString("bg-BG")}</div>
+  <script>window.onload=()=>{window.print();}</script>
+  </body></html>`);
+  w.document.close();
+}
+
+// Компонент за диагностика (модален прозорец)
+export function DiagnosticsModal({ buyback, onSave, onClose }) {
+  // Зарежда съществуваща диагностика или празна
+  const initDiag = () => {
+    if (buyback?.diagnostics) {
+      try { return typeof buyback.diagnostics === "string" ? JSON.parse(buyback.diagnostics) : buyback.diagnostics; }
+      catch { return {}; }
+    }
+    return {};
+  };
+  const [diag, setDiag] = useState(initDiag());
+  const [notes, setNotes] = useState(buyback?.diag_notes || "");
+
+  const setItem = (key, val) => setDiag(p => ({ ...p, [key]: val }));
+
+  const handleSave = () => {
+    onSave({ ...buyback, diagnostics: JSON.stringify(diag), diag_notes: notes });
+    onClose();
+  };
+
+  const countStatus = (status) => DIAGNOSTICS_ITEMS.flatMap(g => g.items).filter(i => diag[i.key] === status).length;
+  const totalItems = DIAGNOSTICS_ITEMS.flatMap(g => g.items).length;
+  const checked = countStatus("ok") + countStatus("fail") + countStatus("na");
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,.75)", zIndex: 1000,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: 16
+    }}>
+      <div style={{
+        background: "#0f172a", borderRadius: 16, width: "100%", maxWidth: 720,
+        maxHeight: "90vh", display: "flex", flexDirection: "column",
+        boxShadow: "0 24px 60px rgba(0,0,0,.7)", border: "1px solid #1e293b"
+      }}>
+        {/* Header */}
+        <div style={{ padding: "20px 24px 16px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 800, color: "#f1f5f9" }}>🔍 Диагностика</div>
+            <div style={{ fontSize: 13, color: "#64748b", marginTop: 3 }}>
+              {buyback?.brand} {buyback?.model} {buyback?.imei ? `· IMEI: ${buyback.imei}` : ""}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            {/* Статистика */}
+            <div style={{ display: "flex", gap: 8, fontSize: 12 }}>
+              <span style={{ background: "#064e3b", color: "#10b981", padding: "3px 10px", borderRadius: 20, fontWeight: 700 }}>✓ {countStatus("ok")}</span>
+              <span style={{ background: "#450a0a", color: "#ef4444", padding: "3px 10px", borderRadius: 20, fontWeight: 700 }}>✗ {countStatus("fail")}</span>
+              <span style={{ background: "#1e293b", color: "#64748b", padding: "3px 10px", borderRadius: 20, fontWeight: 700 }}>— {countStatus("na")}</span>
+              <span style={{ background: "#1e293b", color: "#94a3b8", padding: "3px 10px", borderRadius: 20, fontWeight: 700 }}>{checked}/{totalItems}</span>
+            </div>
+            <button onClick={onClose} style={{ background: "none", border: "none", color: "#64748b", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>✕</button>
+          </div>
+        </div>
+
+        {/* Body - scrollable */}
+        <div style={{ overflowY: "auto", padding: "16px 24px", flex: 1 }}>
+          {DIAGNOSTICS_ITEMS.map(group => (
+            <div key={group.group} style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: .8, marginBottom: 8, paddingBottom: 6, borderBottom: "1px solid #1e293b" }}>
+                {group.group}
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                {group.items.map(item => {
+                  const val = diag[item.key];
+                  return (
+                    <div key={item.key} style={{
+                      display: "flex", alignItems: "center", justifyContent: "space-between",
+                      padding: "8px 12px", borderRadius: 8, background: "#1e293b",
+                      border: `1px solid ${val === "ok" ? "#065f46" : val === "fail" ? "#450a0a" : "#1e293b"}`
+                    }}>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: "#e2e8f0" }}>{item.label}</span>
+                        {item.desc && <span style={{ fontSize: 11, color: "#475569", marginLeft: 8 }}>({item.desc})</span>}
+                      </div>
+                      <div style={{ display: "flex", gap: 4 }}>
+                        {/* OK бутон */}
+                        <button
+                          onClick={() => setItem(item.key, val === "ok" ? undefined : "ok")}
+                          title="Работи"
+                          style={{
+                            width: 36, height: 30, border: "none", borderRadius: 6, cursor: "pointer", fontSize: 14, fontWeight: 800,
+                            background: val === "ok" ? "#059669" : "#0f172a",
+                            color: val === "ok" ? "#fff" : "#334155",
+                            transition: "all .15s"
+                          }}
+                        >✓</button>
+                        {/* FAIL бутон */}
+                        <button
+                          onClick={() => setItem(item.key, val === "fail" ? undefined : "fail")}
+                          title="Не работи / Дефект"
+                          style={{
+                            width: 36, height: 30, border: "none", borderRadius: 6, cursor: "pointer", fontSize: 14, fontWeight: 800,
+                            background: val === "fail" ? "#dc2626" : "#0f172a",
+                            color: val === "fail" ? "#fff" : "#334155",
+                            transition: "all .15s"
+                          }}
+                        >✗</button>
+                        {/* N/A бутон */}
+                        <button
+                          onClick={() => setItem(item.key, val === "na" ? undefined : "na")}
+                          title="Не е приложимо"
+                          style={{
+                            width: 36, height: 30, border: "none", borderRadius: 6, cursor: "pointer", fontSize: 11, fontWeight: 700,
+                            background: val === "na" ? "#334155" : "#0f172a",
+                            color: val === "na" ? "#94a3b8" : "#334155",
+                            transition: "all .15s"
+                          }}
+                        >N/A</button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          {/* Бележки */}
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: .4, marginBottom: 6 }}>Бележки от диагностиката</div>
+            <textarea
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+              rows={3}
+              placeholder="Допълнително описание, забележки..."
+              style={{ width: "100%", resize: "vertical", boxSizing: "border-box" }}
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+<div style={{ padding: "14px 24px", borderTop: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+  <button onClick={onClose} style={{ background: "#1e293b", color: "#94a3b8", border: "none", borderRadius: 8, padding: "9px 16px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>Затвори</button>
+  <div style={{ display: "flex", gap: 8 }}>
+    <button onClick={() => printDiagnostics(buyback, diag, notes)} style={{ background: "#1e1b4b", color: "#a78bfa", border: "1px solid #4c1d95", borderRadius: 8, padding: "9px 16px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>🖨️ Принтирай</button>
+    <button onClick={handleSave} style={{ background: "linear-gradient(135deg,#38bdf8,#0ea5e9)", color: "#fff", border: "none", borderRadius: 9, padding: "9px 20px", fontWeight: 700, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>💾 Запази диагностика</button>
+  </div>
+</div>
+      </div>
+    </div>
+  );
+}
+
 
 // ══ BUYBACKS ════════════════════════════════════════════════════════════════════
 export function BuybacksTab({ buybacks, inventory, onSave, onDelete, onAddToInventory, notify, isAdmin = false }) {
   const [modal, setModal] = useState(null);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Всички");
+  const [diagModal, setDiagModal] = useState(null);
   const filtered = buybacks.filter(b => {
     const q = search.toLowerCase();
     return (!q || [b.brand, b.model, b.imei, b.seller_name, b.seller_phone].some(f => (f || "").toLowerCase().includes(q))) && (filter === "Всички" || b.status === filter);
@@ -404,10 +679,11 @@ export function BuybacksTab({ buybacks, inventory, onSave, onDelete, onAddToInve
   )}
 </td>
                   <td style={{ padding: "9px 14px" }}><div style={{ display: "flex", gap: 3 }}>
-                    <MBtn color="#3b82f6" onClick={() => setModal(b)}>✏️</MBtn>
-                    <MBtn color="#8b5cf6" onClick={() => printProtocol(b)} title="Протокол">📄</MBtn>
-                    <MBtn color="#ef4444" onClick={() => { if (confirm("Изтрий?")) onDelete(b.id); }}>🗑️</MBtn>
-                  </div></td>
+  <MBtn color="#3b82f6" onClick={() => setModal(b)}>✏️</MBtn>
+  <MBtn color="#10b981" onClick={() => setDiagModal(b)} title="Диагностика">🔍</MBtn>
+  <MBtn color="#8b5cf6" onClick={() => printProtocol(b)} title="Протокол">📄</MBtn>
+  <MBtn color="#ef4444" onClick={() => { if (confirm("Изтрий?")) onDelete(b.id); }}>🗑️</MBtn>
+</div></td>
                 </tr>
               ))}
             </tbody>
@@ -415,6 +691,7 @@ export function BuybacksTab({ buybacks, inventory, onSave, onDelete, onAddToInve
         </div>
       </MCard>
       {modal !== null && <BuybackModal buyback={modal} onSave={r => { onSave(r); setModal(null); }} onClose={() => setModal(null)} />}
+        {diagModal !== null && <DiagnosticsModal buyback={diagModal} onSave={r => { onSave(r); setDiagModal(null); }} onClose={() => setDiagModal(null)} />}
     </div>
   );
 }
