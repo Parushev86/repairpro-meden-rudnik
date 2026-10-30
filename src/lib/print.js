@@ -469,8 +469,8 @@ export function printWarranty(order) {
       ${order.serial_number?`<div style="font-size:14px;color:#0369a1;margin-top:8px;font-weight:800">IMEI: ${order.serial_number}</div>`:''}
     </div>
     <div class="warranty-period">
-      <div class="days">${warrantyLabel}</div>
-      <div class="label">гаранция (${warrantyDays} дни)</div>
+            <div class="days">${warrantyDays} дни</div>
+      <div class="label">гаранционен период</div>
       <div class="dates">от ${new Date(issueDate).toLocaleDateString('bg-BG')} до ${expiryDate}</div>
     </div>
     <div class="info-grid">
