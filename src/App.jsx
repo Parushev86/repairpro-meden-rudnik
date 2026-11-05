@@ -1147,8 +1147,8 @@ function AnalyticsPage({ orders, lowStock, activeOrders, readyOrders, technician
 // ═══════════════════════════════ DASHBOARD ════════════════════════════════════
 function Dashboard({ orders, lowStock, activeOrders, readyOrders, technicians, onNewOrder, onExport, notify, accSales = [], partsSales = [], phoneSales = [], analyticsOnly = false }) {
   const totalRev = orders.filter(o => o.status === "Издаден").reduce((s, o) => s + Number(o.price || 0), 0);
-  const monthlyRev = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date(); d.setMonth(d.getMonth() - 5 + i);
+  const monthlyRev = Array.from({ length: 12 }, (_, i) => {
+  const d = new Date(); d.setMonth(d.getMonth() - 11 + i);
     const m = d.getMonth(), y = d.getFullYear();
     const inMonth = (dateStr) => {
       if (!dateStr) return false;
@@ -1312,7 +1312,7 @@ function Dashboard({ orders, lowStock, activeOrders, readyOrders, technicians, o
             {!analyticsOnly && (
         <div style={{ display: "grid", gridTemplateColumns: "1.6fr 1fr", gap: 14, marginBottom: 14 }}>
           <Card>
-            <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Оборот — последните 6 месеца</div>
+            <div style={{ fontSize: 12, color: "var(--text3)", fontWeight: 700, textTransform: "uppercase", letterSpacing: 1, marginBottom: 14 }}>Оборот — последните 12 месеца</div>
             <div style={{ display: "flex", alignItems: "flex-end", gap: 8, height: 110 }}>
               {monthlyRev.map(({ label, rev }, idx) => (
                 <div key={idx} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
