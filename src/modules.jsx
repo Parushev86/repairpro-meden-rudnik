@@ -695,12 +695,41 @@ export function BuybacksTab({ buybacks, inventory, onSave, onDelete, onAddToInve
     </div>
   );
 }
+function printBuybackLabel(f) {
+  const w = window.open("", "_blank");
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Лейбъл</title>
+  <style>
+    @page { size: 62mm 80mm; margin: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      width: 62mm; height: 80mm;
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      text-align: center; padding: 4mm;
+      box-sizing: border-box; margin: 0;
+    }
+    .model  { font-size: 15px; font-weight: 900; color: #111; margin-bottom: 6px; line-height: 1.2; }
+    .desc   { font-size: 10px; color: #444; margin-bottom: 8px; line-height: 1.4; border-top: 1px dashed #ccc; border-bottom: 1px dashed #ccc; padding: 5px 0; width: 100%; }
+    .name   { font-size: 11px; font-weight: 700; color: #111; margin-bottom: 2px; }
+    .phone  { font-size: 13px; font-weight: 900; color: #1a56db; }
+    .label  { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
+  </style></head><body>
+  <div class="model">${f.brand || ""} ${f.model || ""}</div>
+  <div class="desc">${f.problem || f.condition || "—"}</div>
+  <div class="label">Клиент</div>
+  <div class="name">${f.seller_name || "—"}</div>
+  <div class="phone">${f.seller_phone || "—"}</div>
+  <script>window.onload=()=>{ window.print(); }</script>
+  </body></html>`);
+  w.document.close();
+}
 
 function BuybackModal({ buyback, onSave, onClose }) {
   const [f, sf] = useState({ date: today(), brand: "", model: "", imei: "", color: "", condition: "", problem: "", seller_name: "", seller_phone: "", price: "", status: "Чака потвърждение", notes: "", ...buyback });
   const s = (k, v) => sf(x => ({ ...x, [k]: v }));
   return (
-    <MModal title={buyback?.id ? "Редактирай" : "Ново изкупуване"} onClose={onClose} maxWidth={700} footer={<><CancelBtn onClick={onClose} /><MPrimaryBtn onClick={() => { if (!f.brand || !f.model) { alert("Въведи марка и модел!"); return; } onSave({ ...f, price: f.price === "" ? 0 : f.price }); }}>💾 Запази</MPrimaryBtn></>}>
+    <MModal title={buyback?.id ? "Редактирай" : "Ново изкупуване"} onClose={onClose} maxWidth={700} footer={<><CancelBtn onClick={onClose} /><button onClick={() => printBuybackLabel(f)} style={{ background: "#1e1b4b", color: "#a78bfa", border: "1px solid #4c1d95", borderRadius: 8, padding: "9px 16px", cursor: "pointer", fontWeight: 600, fontSize: 13 }}>🖨️ Лейбъл</button><MPrimaryBtn onClick={() => { if (!f.brand || !f.model) { alert("Въведи марка и модел!"); return; } onSave({ ...f, price: f.price === "" ? 0 : f.price }); }}>💾 Запази</MPrimaryBtn></>}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <MField label="Дата"><input type="date" value={f.date} onChange={e => s("date", e.target.value)} /></MField>
         <MField label="Статус"><select value={f.status} onChange={e => s("status", e.target.value)}>{BUYBACK_STATUSES.map(x => <option key={x}>{x}</option>)}</select></MField>
