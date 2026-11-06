@@ -715,6 +715,7 @@ function printBuybackLabel(f) {
     .phone  { font-size: 13px; font-weight: 900; color: #1a56db; }
     .label  { font-size: 9px; color: #888; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 2px; }
   </style></head><body>
+   <div style="background:#dc2626;color:#fff;font-size:10px;font-weight:900;letter-spacing:1px;padding:3px 10px;border-radius:4px;margin-bottom:6px;text-transform:uppercase">📱 ИЗКУПУВАНЕ</div>
   <div class="model">${f.brand || ""} ${f.model || ""}</div>
   <div class="desc">${f.problem || f.condition || "—"}</div>
   <div class="label">Клиент</div>
