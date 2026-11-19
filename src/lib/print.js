@@ -257,9 +257,11 @@ ${['bg', 'ru', 'en', 'de'].map(lang => {
     <p>${T.subtitle}</p>
     <div class="order-id">${order.id}</div>
   </div>
-  <div style="text-align:right">
-    <img src="${qr}" width="110" height="110" alt="QR" style="border:1px solid #ddd;padding:4px;border-radius:4px"/>
-    <p style="font-size:10px;color:#999;margin:4px 0 0">${T.qrHint}</p>
+    <div style="text-align:right;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:12px;color:#1e3a5f;line-height:1.9;">
+    <div style="font-weight:700;font-size:13px;margin-bottom:4px;">📍 ${lang === 'ru' ? 'Наш адрес' : lang === 'en' ? 'Our address' : lang === 'de' ? 'Unsere Adresse' : 'Нашият адрес'}</div>
+    <div>${lang === 'ru' ? 'Город' : lang === 'en' ? 'City' : lang === 'de' ? 'Stadt' : 'Град'}: <strong>Бургас (кв. Меден Рудник)</strong></div>
+    <div>${lang === 'ru' ? 'Улица' : lang === 'en' ? 'Street' : lang === 'de' ? 'Straße' : 'Улица'}: <strong>„Въстаническа", бл. 531, срещу Терминала</strong></div>
+    <div>${lang === 'ru' ? 'Телефон' : lang === 'en' ? 'Phone' : lang === 'de' ? 'Telefon' : 'Телефон'}: <strong>0877 05 76 60</strong></div>
   </div>
 </div>
 <table>
