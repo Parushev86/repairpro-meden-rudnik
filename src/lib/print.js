@@ -279,6 +279,12 @@ ${order.notes ? `<div style="padding:10px 14px;background:#f8fafc;border-radius:
   ${T.warning}<br/>
   ${T.warrantyText(order.warranty_days || 90)}
 </div>
+<div style="margin-top:12px;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;font-size:12px;color:#374151;line-height:1.8;">
+  <strong>${lang === 'ru' ? '💰 Цены на диагностику' : lang === 'en' ? '💰 Diagnostic prices' : lang === 'de' ? '💰 Diagnosepreise' : '💰 Цени за диагностика'}:</strong><br/>
+  • ${lang === 'ru' ? 'Телефон, планшет, джойстик или смарт-часы' : lang === 'en' ? 'Phone, tablet, joystick or smartwatch' : lang === 'de' ? 'Handy, Tablet, Joystick oder Smartwatch' : 'Телефон, таблет, джойстик или смарт часовник'}: <strong>10€</strong><br/>
+  • ${lang === 'ru' ? 'Игровая консоль' : lang === 'en' ? 'Game console' : lang === 'de' ? 'Spielkonsole' : 'Игрова конзола'}: <strong>20€</strong><br/>
+  • ${lang === 'ru' ? 'Ноутбук, компьютер' : lang === 'en' ? 'Laptop, computer' : lang === 'de' ? 'Laptop, Computer' : 'Лаптоп, компютър'}: <strong>20€</strong>
+</div>
 <div class="sig-row">
   <div class="sig-box"><hr><p>${T.handedBy}: <strong>${order.client_name}</strong></p></div>
   <div class="sig-box"><hr><p>${T.receivedBy}: <strong>${order.technician || "Техник"}</strong></p></div>
