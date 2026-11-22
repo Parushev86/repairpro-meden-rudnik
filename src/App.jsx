@@ -534,8 +534,7 @@ export default function App() {
         syncing={syncing} onSettings={() => setSettingsOpen(true)} onRefresh={() => loadData(false)}
         onNewOrder={() => setOrderModal("new")} trash={trash} isAdmin={isAdmin} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}
         dismantleCount={dismantleRecs.filter(r => r.status === "Чака разглобяване" || r.status === "В процес").length}
-                chatUnread={chatUnread}
-        accSales={accSales} partsSales={partsSales} phoneSales={phoneSales} />
+        chatUnread={chatUnread} />
 
       {/* ── MAIN ── */}
       <main style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column" }}>
@@ -1004,12 +1003,8 @@ export default function App() {
 // КРАЙ НА ЧАСТ 1
 // ЧАСТ 2
 // ═══════════════════════════════ SIDEBAR ══════════════════════════════════════
-function Sidebar({ tab, setTab, readyOrders, lowStock, activeOrders, orders, connected, realtimeOn, syncing, onSettings, onRefresh, onNewOrder, trash = [], isAdmin = false, sidebarOpen = false, setSidebarOpen = () => { }, dismantleCount = 0, chatUnread = 0, accSales = [], partsSales = [], phoneSales = [] }) {
-  const revRepairs = orders.filter(o => o.status === "Издаден").reduce((s, o) => s + Number(o.price || 0), 0);
-  const revAcc = accSales.reduce((s, r) => s + Number(r.sale_price || 0) * Number(r.quantity || 1), 0);
-  const revParts = partsSales.reduce((s, r) => s + Number(r.sale_price || 0) * Number(r.quantity || 1), 0);
-  const revPhones = phoneSales.reduce((s, r) => s + Number(r.sale_price || 0), 0);
-  const totalRev = revRepairs + revAcc + revParts + revPhones;
+function Sidebar({ tab, setTab, readyOrders, lowStock, activeOrders, orders, connected, realtimeOn, syncing, onSettings, onRefresh, onNewOrder, trash = [], isAdmin = false, sidebarOpen = false, setSidebarOpen = () => { }, dismantleCount = 0, chatUnread = 0 }) {
+  const totalRev = orders.filter(o => o.status === "Издаден").reduce((s, o) => s + Number(o.price || 0), 0);
   return (
     <>
       {sidebarOpen && <div onClick={() => setSidebarOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", zIndex: 99, display: "none" }} className="mobile-overlay" />}
@@ -1082,19 +1077,7 @@ function Sidebar({ tab, setTab, readyOrders, lowStock, activeOrders, orders, con
               <span style={{ color: "#64748b" }}>Активни</span><span style={{ color: "#f59e0b", fontWeight: 700 }}>{activeOrders.length}</span>
             </div>
             {isAdmin && <div style={{ display: "flex", justifyContent: "space-between" }}>
-                            <span style={{ color: "#64748b" }}>Общ оборот</span><span style={{ color: "#10b981", fontWeight: 700, fontSize: 12 }}>{fmtMoney(totalRev)}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 2 }}>
-              <span style={{ color: "#475569", fontSize: 10 }}>🔧 Ремонти</span><span style={{ color: "#94a3b8", fontSize: 10 }}>{fmtMoney(revRepairs)}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#475569", fontSize: 10 }}>🎧 Аксесоари</span><span style={{ color: "#94a3b8", fontSize: 10 }}>{fmtMoney(revAcc)}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#475569", fontSize: 10 }}>🔩 Части</span><span style={{ color: "#94a3b8", fontSize: 10 }}>{fmtMoney(revParts)}</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <span style={{ color: "#475569", fontSize: 10 }}>📱 Телефони</span><span style={{ color: "#94a3b8", fontSize: 10 }}>{fmtMoney(revPhones)}</span>
+              <span style={{ color: "#64748b" }}>Общ оборот</span><span style={{ color: "#10b981", fontWeight: 700, fontSize: 12 }}>{fmtMoney(totalRev)}</span>
             </div>}
           </div>
           <div style={{ display: "flex", gap: 6 }}>
