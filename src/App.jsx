@@ -1097,7 +1097,8 @@ function Sidebar({ tab, setTab, readyOrders, lowStock, activeOrders, orders, con
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <span style={{ color: "#475569", fontSize: 10 }}>📱 Телефони</span><span style={{ color: "#94a3b8", fontSize: 10 }}>{fmtMoney(revPhones)}</span>
               </div>
-            </>}
+                        </>}
+          </div>
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={onRefresh} title="Обнови данните" style={{ flex: 1, background: "#1e293b", color: "#64748b", border: "none", borderRadius: 7, padding: "7px", fontSize: 12, cursor: "pointer" }}>🔄 Обнови</button>
             {isAdmin && <button onClick={onSettings} title="Настройки" style={{ flex: 1, background: "#1e293b", color: "#64748b", border: "none", borderRadius: 7, padding: "7px", fontSize: 12, cursor: "pointer" }}>⚙️ Настройки</button>}
