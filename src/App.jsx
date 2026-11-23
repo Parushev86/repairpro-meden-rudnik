@@ -502,7 +502,12 @@ export default function App() {
   const ok = !q || [o.id, o.client_name, o.phone, o.email, o.problem, o.brand, o.model, o.technician, o.serial_number]
     .some(f => (f || "").toLowerCase().includes(q));
     // Издадените поръчки се показват винаги
+    const oneMonthAgo = new Date();
+  oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+  const orderDate = new Date(o.date_in || o.created_at || 0);
+  const recentEnough = o.status !== "Издаден" || orderDate >= oneMonthAgo;
   return ok
+    && recentEnough
     && (filterStatus === "Всички" || o.status === filterStatus)
     && (filterDevice === "Всички" || o.device_type === filterDevice);
 });
