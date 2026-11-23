@@ -1052,9 +1052,14 @@ export function PhoneSalesTab({ sales, inventory = [], onSave, onDelete, onWarra
   const [dateTo, setDateTo] = useState("");
   const [selected, setSelected] = useState(new Set());
 
-  const filtered = sales.filter(s => {
+    const filtered = sales.filter(s => {
     const q = search.toLowerCase();
-    if (!isAdmin && !q && s.payment_method !== "Не е платена") return false;
+    if (!isAdmin && !q) {
+      const threeDaysAgo = new Date();
+      threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+      const saleDate = new Date(s.date || 0);
+      if (saleDate < threeDaysAgo) return false;
+    }
     const matchSearch = !q || [s.brand, s.model, s.imei, s.buyer_name].some(f => (f || "").toLowerCase().includes(q));
     let matchDate = true;
     if (periodMode === "Ден" && date) matchDate = (s.date || "").slice(0, 10) === date;
