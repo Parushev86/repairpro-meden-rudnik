@@ -501,8 +501,7 @@ export default function App() {
   const q = search.toLowerCase();
   const ok = !q || [o.id, o.client_name, o.phone, o.email, o.problem, o.brand, o.model, o.technician, o.serial_number]
     .some(f => (f || "").toLowerCase().includes(q));
-  // Техниците не виждат издадените поръчки освен ако не търсят
-  if (!isAdmin && !q && o.status === "Издаден") return false;
+    // Издадените поръчки се показват винаги
   return ok
     && (filterStatus === "Всички" || o.status === filterStatus)
     && (filterDevice === "Всички" || o.device_type === filterDevice);
