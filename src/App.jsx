@@ -1,7 +1,7 @@
 // ЧАСТ 1
 import { useState, useEffect, useCallback, useRef, memo } from "react";
 import * as XLSX from "xlsx";
-import { getSupabase, resetSupabase, fetchOrders, fetchInventory, fetchTechnicians, upsertOrder, deleteOrder as dbDeleteOrder, upsertInventory, deleteInventory as dbDeleteInv, upsertTechnician, deleteTechnician as dbDeleteTech, subscribeOrders, subscribeInventory } from "./lib/supabase.js";
+import { getSupabase, resetSupabase, fetchOrders, logInventoryChange, fetchInventoryLog, fetchInventory, fetchTechnicians, upsertOrder, deleteOrder as dbDeleteOrder, upsertInventory, deleteInventory as dbDeleteInv, upsertTechnician, deleteTechnician as dbDeleteTech, subscribeOrders, subscribeInventory } from "./lib/supabase.js";
 import { genId, today, STATUSES, STATUS_COLOR, STATUS_BG, DEVICE_TYPES, PROBLEMS, PROBLEMS_BY_DEVICE, CATEGORIES, MONTHS_BG, fmtDate, fmtMoney, fmtDatetime } from "./lib/constants.js";
 import { printProtocol, printLabel, downloadProtocolTXT, printWarranty } from "./lib/print.js";
 import MonthlyReport from "./MonthlyReport.jsx";
@@ -112,7 +112,7 @@ export default function App() {
   const [stockOrders, setStockOrders] = useState([]);
   const [supplierDebts, setSupplierDebts] = useState([]);
     const [trash, setTrash] = useState([]);
-  const [inventoryLog, setInventoryLog] = useState([]);
+    const [inventoryLog, setInventoryLog] = useState([]);
   const [dismantleRecs, setDismantleRecs] = useState([]);
   const [monthlyExpenses, setMonthlyExpenses] = useState([]);
   const [chatUnread, setChatUnread] = useState(0);
@@ -157,12 +157,12 @@ export default function App() {
   const loadData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const [o, inv, tech, exp, cash, acc, bb, ps, phs, so, sd, tr, dis, me] = await Promise.all([
+            const [o, inv, tech, exp, cash, acc, bb, ps, phs, so, sd, tr, dis, me, invLog] = await Promise.all([
         fetchOrders(), fetchInventory(), fetchTechnicians(),
         fetchExpenses(), fetchCashRegister(), fetchAccessorySales(),
         fetchBuybacks(), fetchPartsSales(), fetchPhoneSales(),
         fetchStockOrders(), fetchSupplierDebts(), fetchTrash(),
-        fetchDismantle(), fetchMonthlyExpenses(),
+        fetchDismantle(), fetchMonthlyExpenses(), fetchInventoryLog(),
       ]);
       setOrders(o);
       setTechnicians(tech);
@@ -393,16 +393,18 @@ export default function App() {
         const oldQty = Number(oldItem?.quantity || 0);
         const newQty = Number(item.quantity || 0);
         if (oldQty !== newQty) {
-          const logEntry = {
-            id: crypto.randomUUID(),
+                    const logEntry = {
             item_name: item.name,
             item_id: item.id,
             old_qty: oldQty,
             new_qty: newQty,
             diff: newQty - oldQty,
-            changed_at: new Date().toISOString(),
+            changed_by: currentUser || "—",
           };
-          setInventoryLog(p => [logEntry, ...p]);
+          try {
+            const saved = await logInventoryChange(logEntry);
+            setInventoryLog(p => [saved, ...p]);
+          } catch(e) { console.warn("Log error:", e); }
         }
       }
       if (!realtimeOn) {
