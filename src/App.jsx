@@ -1,7 +1,7 @@
 // ЧАСТ 1
 import { useState, useEffect, useCallback, useRef, memo } from "react";
 import * as XLSX from "xlsx";
-import { getSupabase, resetSupabase, fetchOrders, logInventoryChange, fetchInventoryLog, fetchInventory, fetchTechnicians, upsertOrder, deleteOrder as dbDeleteOrder, upsertInventory, deleteInventory as dbDeleteInv, upsertTechnician, deleteTechnician as dbDeleteTech, subscribeOrders, subscribeInventory } from "./lib/supabase.js";
+import { getSupabase, resetSupabase, fetchOrders, fetchInventory, fetchTechnicians, upsertOrder, deleteOrder as dbDeleteOrder, upsertInventory, deleteInventory as dbDeleteInv, upsertTechnician, deleteTechnician as dbDeleteTech, subscribeOrders, subscribeInventory } from "./lib/supabase.js";
 import { genId, today, STATUSES, STATUS_COLOR, STATUS_BG, DEVICE_TYPES, PROBLEMS, PROBLEMS_BY_DEVICE, CATEGORIES, MONTHS_BG, fmtDate, fmtMoney, fmtDatetime } from "./lib/constants.js";
 import { printProtocol, printLabel, downloadProtocolTXT, printWarranty } from "./lib/print.js";
 import MonthlyReport from "./MonthlyReport.jsx";
@@ -111,8 +111,7 @@ export default function App() {
   const [phoneSales, setPhoneSales] = useState([]);
   const [stockOrders, setStockOrders] = useState([]);
   const [supplierDebts, setSupplierDebts] = useState([]);
-    const [trash, setTrash] = useState([]);
-    const [inventoryLog, setInventoryLog] = useState([]);
+  const [trash, setTrash] = useState([]);
   const [dismantleRecs, setDismantleRecs] = useState([]);
   const [monthlyExpenses, setMonthlyExpenses] = useState([]);
   const [chatUnread, setChatUnread] = useState(0);
@@ -157,12 +156,12 @@ export default function App() {
   const loadData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-            const [o, inv, tech, exp, cash, acc, bb, ps, phs, so, sd, tr, dis, me, invLog] = await Promise.all([
+      const [o, inv, tech, exp, cash, acc, bb, ps, phs, so, sd, tr, dis, me] = await Promise.all([
         fetchOrders(), fetchInventory(), fetchTechnicians(),
         fetchExpenses(), fetchCashRegister(), fetchAccessorySales(),
         fetchBuybacks(), fetchPartsSales(), fetchPhoneSales(),
         fetchStockOrders(), fetchSupplierDebts(), fetchTrash(),
-        fetchDismantle(), fetchMonthlyExpenses(), fetchInventoryLog(),
+        fetchDismantle(), fetchMonthlyExpenses(),
       ]);
       setOrders(o);
       setTechnicians(tech);
@@ -387,27 +386,6 @@ export default function App() {
       }
             const itemWithDate = item.id ? item : { ...item, created_at: new Date().toISOString() };
       const saved = await upsertInventory(itemWithDate);
-      // Логвай промяна на количество
-      if (item.id) {
-        const oldItem = inventory.find(i => i.id === item.id);
-        const oldQty = Number(oldItem?.quantity || 0);
-        const newQty = Number(item.quantity || 0);
-        if (oldQty !== newQty) {
-                              const logEntry = {
-            item_name: item.name,
-            item_id: item.id,
-            old_qty: oldQty,
-            new_qty: newQty,
-            diff: newQty - oldQty,
-            changed_by: currentUser || "—",
-          };
-          try {
-            const saved = await logInventoryChange(logEntry);
-            setInventoryLog(p => [saved, ...p]);
-          } catch(e) { console.warn("Log error:", e); }
-          
-        }
-      }
       if (!realtimeOn) {
         if (!item.id) setInventory(p => [saved, ...p]);
         else setInventory(p => p.map(i => i.id === saved.id ? saved : i));
@@ -916,9 +894,8 @@ export default function App() {
             cashReg={cashReg}
           />}
           {tab === "users" && <UsersTab />}
-                    {tab === "trash" && <TrashTab
+          {tab === "trash" && <TrashTab
             trash={trash}
-            inventoryLog={inventoryLog}
             onRestore={async item => {
               try {
                 await restoreFromTrash(item);
@@ -5874,9 +5851,8 @@ const TABLE_LABELS = {
   supplier_debts: "💳 Задължение",
 };
 
-function TrashTab({ trash, onRestore, onDelete, inventoryLog = [] }) {
+function TrashTab({ trash, onRestore, onDelete }) {
   const [filter, setFilter] = useState("Всички");
-  const [showLog, setShowLog] = useState(false);
   const now = new Date();
   const active = trash.filter(t => new Date(t.expires_at) > now);
   const expired = trash.filter(t => new Date(t.expires_at) <= now);
@@ -5902,54 +5878,17 @@ function TrashTab({ trash, onRestore, onDelete, inventoryLog = [] }) {
 
   return (
     <div className="animate-fade">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800 }}>🗑️ Кошче</h1>
           <p style={{ margin: "3px 0 0", color: "var(--text3)", fontSize: 12 }}>
             Записите се пазят <b style={{ color: "#f59e0b" }}>5 дни</b> преди окончателно изтриване
           </p>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {expired.length > 0 && (
-            <div style={{ fontSize: 12, color: "#64748b" }}>⏰ {expired.length} изтекли записа</div>
-          )}
-          <button onClick={() => setShowLog(v => !v)} style={{ padding: "6px 14px", borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: "pointer", border: "none", background: showLog ? "#f59e0b" : "#1e293b", color: showLog ? "#0f172a" : "#64748b" }}>
-            📋 Лог склад {inventoryLog.length > 0 ? `(${inventoryLog.length})` : ""}
-          </button>
-        </div>
+        {expired.length > 0 && (
+          <div style={{ fontSize: 12, color: "#64748b" }}>⏰ {expired.length} изтекли записа</div>
+        )}
       </div>
-
-      {showLog && (
-        <Card style={{ marginBottom: 20, padding: 0, overflow: "hidden" }}>
-          <div style={{ padding: "12px 16px", borderBottom: "1px solid #1e293b", fontWeight: 700, fontSize: 13, color: "#f59e0b" }}>📋 Промени в количества — Склад</div>
-          {inventoryLog.length === 0 ? (
-            <div style={{ padding: 24, textAlign: "center", color: "#64748b", fontSize: 13 }}>Няма записани промени в тази сесия</div>
-          ) : (
-            <div className="table-wrap">
-              <table>
-                <thead style={{ background: "#0a1628" }}>
-                  <tr>{["Артикул", "Старо кол.", "Ново кол.", "Разлика", "Дата/час"].map(h => (
-                    <th key={h} style={{ padding: "8px 12px", fontSize: 11, color: "#64748b", fontWeight: 600, textAlign: "left" }}>{h}</th>
-                  ))}</tr>
-                </thead>
-                <tbody>
-                  {inventoryLog.map(log => (
-                    <tr key={log.id} style={{ borderTop: "1px solid #1e293b" }}>
-                      <td style={{ padding: "8px 12px", fontSize: 13 }}>{log.item_name}</td>
-                      <td style={{ padding: "8px 12px", fontSize: 13, color: "#94a3b8" }}>{log.old_qty} бр.</td>
-                      <td style={{ padding: "8px 12px", fontSize: 13, color: "#94a3b8" }}>{log.new_qty} бр.</td>
-                      <td style={{ padding: "8px 12px", fontSize: 13, fontWeight: 700, color: log.diff > 0 ? "#10b981" : "#ef4444" }}>
-                        {log.diff > 0 ? "+" : ""}{log.diff} бр.
-                      </td>
-                      <td style={{ padding: "8px 12px", fontSize: 11, color: "#64748b" }}>{new Date(log.changed_at).toLocaleString("bg-BG")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      )}
 
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
         {tables.map(t => (
