@@ -130,17 +130,3 @@ export function subscribeInventory(callback) {
     .on("postgres_changes", { event: "*", schema: "public", table: "inventory" }, callback)
     .subscribe();
 }
-export async function logInventoryChange(entry) {
-  const sb = getSupabase();
-  if (!sb) return;
-  const { data, error } = await sb.from("inventory_log").insert([entry]).select().single();
-  if (error) throw error;
-  return data;
-}
-export async function fetchInventoryLog() {
-  const sb = getSupabase();
-  if (!sb) return [];
-  const { data, error } = await sb.from("inventory_log").select("*").order("changed_at", { ascending: false }).limit(500);
-  if (error) throw error;
-  return data || [];
-}
