@@ -405,7 +405,7 @@ export default function App() {
             const saved = await logInventoryChange(logEntry);
             setInventoryLog(p => [saved, ...p]);
           } catch(e) { console.warn("Log error:", e); }
-          } catch(e) { console.warn("Log error:", e); }
+          
         }
       }
       if (!realtimeOn) {
