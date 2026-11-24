@@ -393,7 +393,7 @@ export default function App() {
         const oldQty = Number(oldItem?.quantity || 0);
         const newQty = Number(item.quantity || 0);
         if (oldQty !== newQty) {
-                    const logEntry = {
+                              const logEntry = {
             item_name: item.name,
             item_id: item.id,
             old_qty: oldQty,
@@ -404,6 +404,7 @@ export default function App() {
           try {
             const saved = await logInventoryChange(logEntry);
             setInventoryLog(p => [saved, ...p]);
+          } catch(e) { console.warn("Log error:", e); }
           } catch(e) { console.warn("Log error:", e); }
         }
       }
