@@ -130,3 +130,17 @@ export function subscribeInventory(callback) {
     .on("postgres_changes", { event: "*", schema: "public", table: "inventory" }, callback)
     .subscribe();
 }
+export async function logActivity(entry) {
+  const sb = getSupabase();
+  if (!sb) return;
+  const { data, error } = await sb.from("activity_log").insert([entry]).select().single();
+  if (error) throw error;
+  return data;
+}
+export async function fetchActivityLog() {
+  const sb = getSupabase();
+  if (!sb) return [];
+  const { data, error } = await sb.from("activity_log").select("*").order("created_at", { ascending: false }).limit(500);
+  if (error) throw error;
+  return data || [];
+}
