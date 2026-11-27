@@ -1,7 +1,7 @@
 // ЧАСТ 1
 import { useState, useEffect, useCallback, useRef, memo } from "react";
 import * as XLSX from "xlsx";
-import { getSupabase, resetSupabase, fetchOrders, fetchInventory, fetchTechnicians, upsertOrder, deleteOrder as dbDeleteOrder, upsertInventory, deleteInventory as dbDeleteInv, upsertTechnician, deleteTechnician as dbDeleteTech, subscribeOrders, subscribeInventory } from "./lib/supabase.js";
+import { getSupabase, resetSupabase, fetchOrders, fetchInventory, fetchTechnicians, upsertOrder, deleteOrder as dbDeleteOrder, upsertInventory, deleteInventory as dbDeleteInv, upsertTechnician, deleteTechnician as dbDeleteTech, subscribeOrders, subscribeInventory, logActivity, fetchActivityLog } from "./lib/supabase.js";
 import { genId, today, STATUSES, STATUS_COLOR, STATUS_BG, DEVICE_TYPES, PROBLEMS, PROBLEMS_BY_DEVICE, CATEGORIES, MONTHS_BG, fmtDate, fmtMoney, fmtDatetime } from "./lib/constants.js";
 import { printProtocol, printLabel, downloadProtocolTXT, printWarranty } from "./lib/print.js";
 import MonthlyReport from "./MonthlyReport.jsx";
@@ -114,7 +114,8 @@ export default function App() {
   const [trash, setTrash] = useState([]);
   const [dismantleRecs, setDismantleRecs] = useState([]);
   const [monthlyExpenses, setMonthlyExpenses] = useState([]);
-  const [chatUnread, setChatUnread] = useState(0);
+    const [chatUnread, setChatUnread] = useState(0);
+  const [activityLog, setActivityLog] = useState([]);
   const chatSubRef = useRef(null);
   const subsRef = useRef([]);
 
@@ -156,12 +157,12 @@ export default function App() {
   const loadData = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const [o, inv, tech, exp, cash, acc, bb, ps, phs, so, sd, tr, dis, me] = await Promise.all([
+            const [o, inv, tech, exp, cash, acc, bb, ps, phs, so, sd, tr, dis, me, actLog] = await Promise.all([
         fetchOrders(), fetchInventory(), fetchTechnicians(),
         fetchExpenses(), fetchCashRegister(), fetchAccessorySales(),
         fetchBuybacks(), fetchPartsSales(), fetchPhoneSales(),
         fetchStockOrders(), fetchSupplierDebts(), fetchTrash(),
-        fetchDismantle(), fetchMonthlyExpenses(),
+        fetchDismantle(), fetchMonthlyExpenses(), fetchActivityLog(),
       ]);
       setOrders(o);
       setTechnicians(tech);
@@ -175,7 +176,8 @@ export default function App() {
       setSupplierDebts(sd);
       setTrash(tr);
       setDismantleRecs(dis);
-      setMonthlyExpenses(me || []);
+            setMonthlyExpenses(me || []);
+      setActivityLog(actLog || []);
 
       // 🧹 Премахване на дубликати в склада (по име, case-insensitive)
       const seen = new Set();
@@ -298,6 +300,19 @@ export default function App() {
   };
 
   // ── Save order ─────────────────────────────────────────────────────────────
+    const addLog = async (action_type, description, record_id = "", details = {}) => {
+    try {
+      const entry = {
+        action_type,
+        description,
+        changed_by: currentUser?.username || currentUser?.name || "—",
+        record_id: String(record_id),
+        details,
+      };
+      const saved = await logActivity(entry);
+      if (saved) setActivityLog(p => [saved, ...p]);
+    } catch(e) { console.warn("Activity log error:", e); }
+  };
   const saveOrder = async (ord) => {
     if (syncing) return;
     const isNew = !ord.id;
@@ -338,7 +353,28 @@ export default function App() {
         if (isNew) setOrders(p => [saved, ...p]);
         else setOrders(p => p.map(o => o.id === saved.id ? saved : o));
       }
-      notify(isNew ? "✅ Поръчката е добавена" : "✅ Поръчката е обновена");
+            notify(isNew ? "✅ Поръчката е добавена" : "✅ Поръчката е обновена");
+      await addLog(
+        isNew ? "order_add" : "order_edit",
+        (() => {
+          if (isNew) return `Добавена поръчка: ${final.client_name} — ${final.brand} ${final.model}`;
+          const old = orders.find(o => o.id === final.id);
+          if (!old) return `Редактирана поръчка: ${final.client_name} — ${final.brand} ${final.model}`;
+          const changes = [];
+          if ((old.client_name||"")!==(final.client_name||"")) changes.push(`клиент: ${old.client_name} → ${final.client_name}`);
+          if ((old.phone||"")!==(final.phone||"")) changes.push(`телефон: ${old.phone} → ${final.phone}`);
+          if ((old.brand||"")!==(final.brand||"")) changes.push(`марка: ${old.brand} → ${final.brand}`);
+          if ((old.model||"")!==(final.model||"")) changes.push(`модел: ${old.model} → ${final.model}`);
+          if ((old.technician||"")!==(final.technician||"")) changes.push(`техник: ${old.technician||"—"} → ${final.technician||"—"}`);
+          if ((old.problem||"")!==(final.problem||"")) changes.push(`проблем: ${old.problem} → ${final.problem}`);
+          if ((old.status||"")!==(final.status||"")) changes.push(`статус: ${old.status} → ${final.status}`);
+          if (String(old.total_price||"")!==String(final.total_price||"")) changes.push(`цена: ${old.total_price} → ${final.total_price}`);
+          if ((old.payment_method||"")!==(final.payment_method||"")) changes.push(`плащане: ${old.payment_method||"—"} → ${final.payment_method||"—"}`);
+          if (String(old.warranty_days||"")!==String(final.warranty_days||"")) changes.push(`гаранция: ${old.warranty_days} → ${final.warranty_days} дни`);
+          return `Поръчка ${final.id}: ${final.client_name} — ${final.brand} ${final.model}${changes.length ? " | " + changes.join(", ") : " (без промени)"}`;
+        })(),
+        final.id
+      );
       setOrderModal(null);
     } catch (e) {
       notify("❌ " + e.message, "error");
@@ -354,12 +390,13 @@ export default function App() {
       await dbDeleteOrder(id);
       if (!realtimeOn) setOrders(p => p.filter(o => o.id !== id));
       setTrash(p => [{ table_name: "orders", record_id: id, record_data: ord, deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]);
-      notify("🗑️ Преместено в Кошче (5 дни)", "warn");
+            notify("🗑️ Преместено в Кошче (5 дни)", "warn");
+      await addLog("order_delete", `Изтрита поръчка: ${ord?.client_name} — ${ord?.brand} ${ord?.model}`, id);
     } catch (e) { notify("❌ " + e.message, "error"); }
     setSyncing(false);
   };
 
-  // ── Save inventory ─────────────────────────────────────────────────────────
+  // ── Save inventory───────────────────────────────────────────────────────
   const saveInv = async (item) => {
     setSyncing(true);
     try {
@@ -444,8 +481,26 @@ export default function App() {
           notify("⚠️ Склад ОК, но грешка Разходи: " + e.message, "warn");
         }
       } else {
-        notify(item.id ? "✅ Артикулът е обновен" : "✅ Артикулът е добавен");
+               notify(item.id ? "✅ Артикулът е обновен" : "✅ Артикулът е добавен");
       }
+      await addLog(
+        item.id ? "inv_edit" : "inv_add",
+        (() => {
+          if (!item.id) return `Нов артикул в склад: ${item.name} × ${item.quantity} бр.`;
+          const old = inventory.find(i => i.id === item.id);
+          if (!old) return `Склад обновен: ${item.name}`;
+          const changes = [];
+          if (String(old.quantity)!==String(item.quantity)) changes.push(`бройка: ${old.quantity} → ${item.quantity}`);
+          if (String(old.price)!==String(item.price)) changes.push(`цена: ${old.price} → ${item.price}`);
+          if (String(old.cost)!==String(item.cost)) changes.push(`себестойност: ${old.cost} → ${item.cost}`);
+          if ((old.supplier||"")!==(item.supplier||"")) changes.push(`доставчик: ${old.supplier||"—"} → ${item.supplier||"—"}`);
+          if ((old.name||"")!==(item.name||"")) changes.push(`име: ${old.name} → ${item.name}`);
+          if ((old.payment_status||"")!==(item.payment_status||"")) changes.push(`статус плащане: ${old.payment_status||"—"} → ${item.payment_status||"—"}`);
+          if ((old.payment_method||"")!==(item.payment_method||"")) changes.push(`начин плащане: ${old.payment_method||"—"} → ${item.payment_method||"—"}`);
+          return `Склад обновен: ${item.name}${changes.length ? " — " + changes.join(", ") : " (без промени)"}`;
+        })(),
+        saved?.id || item.id || ""
+      );
       setInvModal(null);
     } catch (e) { notify("❌ " + e.message, "error"); }
     setSyncing(false);
@@ -459,7 +514,8 @@ export default function App() {
       await dbDeleteInv(id);
       if (!realtimeOn) setInventory(p => p.filter(i => i.id !== id));
       setTrash(p => [{ table_name: "inventory", record_id: id, record_data: item, deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]);
-      notify("🗑️ Преместено в Кошче (5 дни)", "warn");
+            notify("🗑️ Преместено в Кошче (5 дни)", "warn");
+      await addLog("inv_delete", `Изтрит от склад: ${item?.name}`, id);
     } catch (e) { notify("❌ " + e.message, "error"); }
     setSyncing(false);
   };
@@ -486,7 +542,7 @@ export default function App() {
   // ── Current user & role ──────────────────────────────────────────────────────
   const currentUser = (() => { try { return JSON.parse(sessionStorage.getItem("rp_user") || "{}"); } catch { return {}; } })();
   const isAdmin = currentUser.role === "Администратор" || currentUser.role === "admin";
-      const ADMIN_TABS = ["analytics", "technicians", "daily", "users", "trash"];
+            const ADMIN_TABS = ["analytics", "technicians", "daily", "users", "trash", "chronology"];
   useEffect(() => {
     if (!isAdmin && ADMIN_TABS.includes(tab)) setTab("orders");
     if (tab === "dashboard" || tab === "reports") setTab("analytics");
@@ -568,7 +624,8 @@ export default function App() {
     const s = await upsertExpense(r);
     if (!r.id) setExpenses(p => [s, ...p]);
     else setExpenses(p => p.map(e => e.id === s.id ? s : e));
-    notify("✅ Разходът е запазен");
+        notify("✅ Разходът е запазен");
+    await addLog(r.id ? "expense_edit" : "expense_add", `Разход: ${r.description || "—"} — €${r.amount || 0}`, s.id);
   }}
   onDeleteExpense={async id => {
     const r = expenses.find(e => e.id === id);
@@ -577,6 +634,7 @@ export default function App() {
     setExpenses(p => p.filter(e => e.id !== id));
     setTrash(p => [{ table_name: "expenses", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]);
     notify("🗑️ В кошчето", "warn");
+    await addLog("expense_delete", `Изтрит разход: ${r?.description || "—"} — €${r?.amount || 0}`, id);
   }}
   onSaveCash={async r => {
     const s = await upsertCashRegister(r);
@@ -592,7 +650,8 @@ export default function App() {
     const s = await upsertExpense(r);
     if (!r.id) setExpenses(p => [s, ...p]);
     else setExpenses(p => p.map(e => e.id === s.id ? s : e));
-    notify("✅ Разходът е запазен");
+        notify("✅ Разходът е запазен");
+    await addLog(r.id ? "expense_edit" : "expense_add", `Разход: ${r.description || "—"} — €${r.amount || 0}`, s.id);
   }}
   onDeleteExpense={async id => {
     const r = expenses.find(e => e.id === id);
@@ -601,6 +660,7 @@ export default function App() {
     setExpenses(p => p.filter(e => e.id !== id));
     setTrash(p => [{ table_name: "expenses", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]);
     notify("🗑️ В кошчето", "warn");
+    await addLog("expense_delete", `Изтрит разход: ${r?.description || "—"} — €${r?.amount || 0}`, id);
   }}
   onSaveCash={async r => {
     const s = await upsertCashRegister(r);
@@ -661,16 +721,17 @@ export default function App() {
       return;
     }
   }
-  notify("✅ Продажбата е записана");
+    notify("✅ Продажбата е записана");
+  await addLog(isNew ? "acc_sale_add" : "acc_sale_edit", `Продажба аксесоар: ${r.name || r.brand || "—"} — €${r.sale_price || r.price || 0}`, s.id);
 }}
-            onDelete={async id => { const r = accSales.find(x => x.id === id); if (r) await moveToTrash("accessory_sales", r); await deleteAccessorySale(id); setAccSales(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "accessory_sales", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); }}
+            onDelete={async id => { const r = accSales.find(x => x.id === id); if (r) await moveToTrash("accessory_sales", r); await deleteAccessorySale(id); setAccSales(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "accessory_sales", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); await addLog("acc_sale_delete", `Изтрита продажба аксесоар: ${r?.name || "—"}`, id); }}
             onUpdateInventory={setInventory}
             notify={notify}
           />}
           {tab === "buybacks" && <BuybacksTab
             buybacks={buybacks} inventory={inventory}
-            onSave={async r => { const s = await upsertBuyback(r); if (!r.id) setBuybacks(p => [s, ...p]); else setBuybacks(p => p.map(x => x.id === s.id ? s : x)); notify("✅ Записът е запазен"); }}
-            onDelete={async id => { const r = buybacks.find(x => x.id === id); if (r) await moveToTrash("buybacks", r); await deleteBuyback(id); setBuybacks(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "buybacks", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); }}
+                        onSave={async r => { const s = await upsertBuyback(r); if (!r.id) setBuybacks(p => [s, ...p]); else setBuybacks(p => p.map(x => x.id === s.id ? s : x)); notify("✅ Записът е запазен"); await addLog(r.id ? "buyback_edit" : "buyback_add", `Изкупуване: ${r.brand || ""} ${r.model || ""} — €${r.price || 0}`, s.id); }}
+            onDelete={async id => { const r = buybacks.find(x => x.id === id); if (r) await moveToTrash("buybacks", r); await deleteBuyback(id); setBuybacks(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "buybacks", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); await addLog("buyback_delete", `Изтрито изкупуване: ${r?.brand || ""} ${r?.model || ""}`, id); }}
             onAddToInventory={async (b, target) => {
   if (target === "inventory") {
     // Заприхождаване в Склад (категория "Телефони")
@@ -871,7 +932,8 @@ export default function App() {
                   }
                 }
 
-                notify("✅ Продажбата е записана");
+                                notify("✅ Продажбата е записана");
+                await addLog(isNew ? "parts_sale_add" : "parts_sale_edit", `Продажба части: €${r.sale_price || 0} — ${r.buyer_name || "—"}`, s.id);
               } catch (e) { notify("❌ Грешка: " + e.message, "error"); }
             }}
             onDelete={async id => { const r = partsSales.find(x => x.id === id); if (r) await moveToTrash("parts_sales", r); await deletePartsSale(id); setPartsSales(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "parts_sales", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); }}
@@ -880,8 +942,8 @@ export default function App() {
           {tab === "stockorders" && <StockOrdersTab
             orders={stockOrders}
             isAdmin={isAdmin}
-            onSave={async r => { const s = await upsertStockOrder(r); if (!r.id) setStockOrders(p => [s, ...p]); else setStockOrders(p => p.map(x => x.id === s.id ? s : x)); notify("✅ Поръчката е запазена"); }}
-            onDelete={async id => { const r = stockOrders.find(x => x.id === id); if (r) await moveToTrash("stock_orders", r); await deleteStockOrder(id); setStockOrders(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "stock_orders", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); }}
+                        onSave={async r => { const s = await upsertStockOrder(r); if (!r.id) setStockOrders(p => [s, ...p]); else setStockOrders(p => p.map(x => x.id === s.id ? s : x)); notify("✅ Поръчката е запазена"); await addLog(r.id ? "stockorder_edit" : "stockorder_add", `Поръчка части: ${r.part_name || r.name || "—"} × ${r.quantity || 1} бр.`, s.id); }}
+            onDelete={async id => { const r = stockOrders.find(x => x.id === id); if (r) await moveToTrash("stock_orders", r); await deleteStockOrder(id); setStockOrders(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "stock_orders", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); await addLog("stockorder_delete", `Изтрита поръчка части: ${r?.part_name || r?.name || "—"}`, id); }}
             notify={notify}
           />}
           {tab === "monthly" && isAdmin && <MonthlyReport
@@ -911,11 +973,39 @@ export default function App() {
               notify("Изтрито завинаги", "error");
             }}
           />}
-          {tab === "chat" && <ChatTab currentUser={currentUser} onUnreadChange={setChatUnread} />}
+                    {tab === "chat" && <ChatTab currentUser={currentUser} onUnreadChange={setChatUnread} />}
+          {tab === "chronology" && isAdmin && (
+            <div style={{ padding: 24, maxWidth: 1100, margin: "0 auto" }}>
+              <h2 style={{ color: "#38bdf8", marginBottom: 16 }}>📋 Хронология на действията</h2>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead>
+                  <tr style={{ color: "#64748b", borderBottom: "1px solid #1e293b" }}>
+                    <th style={{ textAlign: "left", padding: "8px 12px" }}>Дата/час</th>
+                    <th style={{ textAlign: "left", padding: "8px 12px" }}>Потребител</th>
+                    <th style={{ textAlign: "left", padding: "8px 12px" }}>Действие</th>
+                    <th style={{ textAlign: "left", padding: "8px 12px" }}>Описание</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {activityLog.map(log => (
+                    <tr key={log.id} style={{ borderBottom: "1px solid #0f172a" }}>
+                      <td style={{ padding: "8px 12px", color: "#64748b", whiteSpace: "nowrap" }}>{new Date(log.created_at).toLocaleString("bg-BG")}</td>
+                      <td style={{ padding: "8px 12px", color: "#38bdf8", fontWeight: 600 }}>{log.changed_by}</td>
+                      <td style={{ padding: "8px 12px" }}><span style={{ background: "#1e293b", color: "#94a3b8", padding: "2px 8px", borderRadius: 6, fontSize: 11 }}>{log.action_type}</span></td>
+                      <td style={{ padding: "8px 12px", color: "#e2e8f0" }}>{log.description}</td>
+                    </tr>
+                  ))}
+                  {activityLog.length === 0 && (
+                    <tr><td colSpan={4} style={{ padding: 24, textAlign: "center", color: "#475569" }}>Няма записи</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
           {tab === "debts" && <SupplierDebtsTab
             debts={supplierDebts}
-            onSave={async r => { const s = await upsertSupplierDebt(r); if (!r.id) setSupplierDebts(p => [s, ...p]); else setSupplierDebts(p => p.map(x => x.id === s.id ? s : x)); notify("✅ Записът е запазен"); }}
-            onDelete={async id => { const r = supplierDebts.find(x => x.id === id); if (r) await moveToTrash("supplier_debts", r); await deleteSupplierDebt(id); setSupplierDebts(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "supplier_debts", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); }}
+                        onSave={async r => { const s = await upsertSupplierDebt(r); if (!r.id) setSupplierDebts(p => [s, ...p]); else setSupplierDebts(p => p.map(x => x.id === s.id ? s : x)); notify("✅ Записът е запазен"); await addLog(r.id ? "debt_edit" : "debt_add", `Задължение: ${r.part_name || r.supplier || "—"} — €${r.total_amount || 0}`, s.id); }}
+            onDelete={async id => { const r = supplierDebts.find(x => x.id === id); if (r) await moveToTrash("supplier_debts", r); await deleteSupplierDebt(id); setSupplierDebts(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "supplier_debts", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); await addLog("debt_delete", `Изтрито задължение: ${r?.part_name || r?.supplier || "—"}`, id); }}
             notify={notify}
           />}
                     {tab === "phonesales" && <PhoneSalesTab
@@ -988,7 +1078,8 @@ export default function App() {
                     return;
                   }
                 }
-                notify("✅ Продажбата е записана");
+                               notify("✅ Продажбата е записана");
+                await addLog(isNew ? "phone_sale_add" : "phone_sale_edit", `Продажба телефон: ${r.brand || ""} ${r.model || ""} — €${r.sale_price || 0}`, s.id);
               } catch (e) { notify("❌ Грешка: " + e.message, "error"); }
             }}
             onDelete={async id => { const r = phoneSales.find(x => x.id === id); if (r) await moveToTrash("phone_sales", r); await deletePhoneSale(id); setPhoneSales(p => p.filter(x => x.id !== id)); setTrash(p => [{ table_name: "phone_sales", record_id: id, record_data: r, id: crypto.randomUUID(), deleted_at: new Date().toISOString(), expires_at: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString() }, ...p]); notify("🗑️ В кошчето", "warn"); }}
@@ -1042,7 +1133,7 @@ function Sidebar({ tab, setTab, readyOrders, lowStock, activeOrders, orders, con
 
         <nav style={{ flex: 1, padding: "6px 0", overflowY: "auto" }}>
           {[
-            ["orders", "🔧", "Сервиз", readyOrders.length || null],
+                        ["orders", "🔧", "Сервиз", readyOrders.length || null],
             ["inventory", "📦", "Склад", lowStock.length || null],
             ["chat", "💬", "Чат", chatUnread || null],
             ["calculator", "🧮", "Калкулатор", null],
@@ -1056,6 +1147,7 @@ function Sidebar({ tab, setTab, readyOrders, lowStock, activeOrders, orders, con
             ["stockorders", "📋", "Поръчки части", null],
             ["debts", "💳", "Задължения", null],
                         ...(!isAdmin ? [] : [
+              ["chronology", "📋", "Хронология", null],
               ["analytics", "📊", "Анализи", null],
               ["technicians", "👨‍🔧", "Техници", null],
               ["daily", "🧾", "Дневен отчет", null],
